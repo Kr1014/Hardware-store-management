@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProductsModule } from './product/products.module';
 import { dataSourceOptions } from '../typeorm.config';
+import { ClientsModule } from './clients/clients.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { dataSourceOptions } from '../typeorm.config';
 
     AuthModule,
     ProductsModule,
+    ClientsModule
   ],
   controllers: [AppController],
   providers: [AppService],
