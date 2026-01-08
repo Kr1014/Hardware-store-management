@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Client } from './entities/client.entity';
 import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 
 @Injectable()
 export class ClientsService {
@@ -39,7 +40,7 @@ export class ClientsService {
         return 'D';                                   // Deuda alta = +10 días
     }
 
-    async findAll() {
+    async findAll(): Promise<(Client & { creditRating: string })[]> {
         const clients = await this.clientRepository.find({
             where: { isActive: true },
             order: { code: 'ASC' }
@@ -48,17 +49,46 @@ export class ClientsService {
         return clients.map(client => ({
             ...client,
             creditRating: this.calculateCreditRating(client.pendingDebt)
-        }));
+        })) as (Client & { creditRating: string })[];
+    }
+
+    async findOne(id: string): Promise<Client & { creditRating: string }> {
+        const client = await this.clientRepository.findOne({ where: { id } });
+        if (!client) throw new NotFoundException(`Client ${id} not found`);
+        return {
+            ...client,
+            creditRating: this.calculateCreditRating(client.pendingDebt)
+        } as Client & { creditRating: string };
+    }
+
+    async updateDebt(clientId: string, amount: number): Promise<Client & { creditRating: string }> {
+        const client = await this.clientRepository.findOne({ where: { id: clientId } });
+        if (!client) throw new NotFoundException('Client not found');
+
+        // Al tener el transformer en la Entity, esto ya es una suma aritmética segura
+        client.pendingDebt += amount;
+
+        await this.clientRepository.save(client);
+
+        return {
+            ...client,
+            creditRating: this.calculateCreditRating(client.pendingDebt)
+        } as Client & { creditRating: string };
     }
 
 
-    async update(id: string, updateClientDto: Partial<CreateClientDto>): Promise<Client> {
+    async update(id: string, updateClientDto: UpdateClientDto): Promise<Client & { creditRating: string }> {
         const client = await this.clientRepository.findOne({ where: { id } });
-        if (!client) {
-            throw new NotFoundException(`Client with ID ${id} not found`);
-        }
+        if (!client) throw new NotFoundException(`Client ${id} not found`);
 
         Object.assign(client, updateClientDto);
-        return this.clientRepository.save(client);
+
+        await this.clientRepository.save(client);
+
+        return {
+            ...client,
+            creditRating: this.calculateCreditRating(client.pendingDebt)
+        } as Client & { creditRating: string };
     }
+
 }

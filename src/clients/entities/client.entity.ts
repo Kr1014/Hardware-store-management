@@ -17,7 +17,15 @@ export class Client {
     @Column({ nullable: true })
     address: string;
 
-    @Column('decimal', { precision: 12, scale: 2, default: 0 })
+    @Column('decimal', {
+        precision: 12,
+        scale: 2,
+        default: 0,
+        transformer: {
+            to: (value: number) => value,
+            from: (value: string) => parseFloat(value)
+        }
+    })
     pendingDebt: number;
 
     @Column({ default: true })
