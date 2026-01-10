@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -26,5 +26,10 @@ export class ClientsController {
     @Patch(':id')
     update(@Param('id') id: string, @Body() updateClientDto: Partial<CreateClientDto>) {
         return this.clientsService.update(id, updateClientDto);
+    }
+
+    @Get(':id/detail')
+    async getClientDetail(@Param('id', ParseUUIDPipe) id: string) {
+        return this.clientsService.getClientDetail(id);
     }
 }

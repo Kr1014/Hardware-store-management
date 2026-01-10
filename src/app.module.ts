@@ -8,6 +8,7 @@ import { ProductsModule } from './product/products.module';
 import { dataSourceOptions } from '../typeorm.config';
 import { ClientsModule } from './clients/clients.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { InvoicesModule } from './invoices/invoices.module';
     ProductsModule,
     ClientsModule,
     InvoicesModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

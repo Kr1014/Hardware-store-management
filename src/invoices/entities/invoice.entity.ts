@@ -1,7 +1,9 @@
 import {
-    Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn
+    Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn,
+    OneToMany
 } from 'typeorm';
 import { Client } from '../../clients/entities/client.entity';
+import { InvoiceItem } from './invoice-item.entity';
 
 @Entity('invoices')
 export class Invoice {
@@ -39,4 +41,7 @@ export class Invoice {
 
     @CreateDateColumn()
     createdAt: Date;
+
+    @OneToMany(() => InvoiceItem, item => item.invoice)
+    items: InvoiceItem[];
 }
