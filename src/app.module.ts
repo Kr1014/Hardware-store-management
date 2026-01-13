@@ -9,6 +9,9 @@ import { dataSourceOptions } from '../typeorm.config';
 import { ClientsModule } from './clients/clients.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { PaymentsModule } from './payments/payments.module';
+import { DashboardService } from './dashboard/dashboard.service';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -37,6 +40,8 @@ import { PaymentsModule } from './payments/payments.module';
     ClientsModule,
     InvoicesModule,
     PaymentsModule,
+    DashboardModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
