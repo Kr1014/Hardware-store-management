@@ -5,9 +5,10 @@ import { Client } from '../clients/entities/client.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { DashboardController } from './dashboard.controller';
+import { InventoryModule } from 'src/inventory/inventory.module';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Client, Invoice, Payment])],
+    imports: [TypeOrmModule.forFeature([Client, Invoice, Payment,]), InventoryModule],
     controllers: [DashboardController],
     providers: [DashboardService],
     exports: [DashboardService]
