@@ -1,10 +1,12 @@
-import { forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Invoice } from './entities/invoice.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { ClientsService } from '../clients/clients.service';
 import { InvoiceItem } from './entities/invoice-item.entity';
+import { Inventory } from '../inventory/entities/inventory.entity';
+import { Product } from 'src/product/entities/product.entity';
 
 @Injectable()
 export class InvoicesService {
@@ -15,35 +17,80 @@ export class InvoicesService {
         @InjectRepository(InvoiceItem)
         private invoiceItemRepository: Repository<InvoiceItem>,
 
-        @Inject(forwardRef(() => ClientsService)) // <--- ESTO ES LO QUE FALTA
+        @InjectRepository(Inventory)
+        private inventoryRepository: Repository<Inventory>,
+
+        @InjectRepository(Product)
+        private productRepository: Repository<Product>,
+
+        @Inject(forwardRef(() => ClientsService))
         private clientsService: ClientsService,
     ) { }
 
     async create(createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
-        const { pendingAmount, creditDays, issueDate } = createInvoiceDto;
+        const { pendingAmount, creditDays, issueDate, items, clientId, ...rest } = createInvoiceDto;
 
-        // Manejo de fechas simplificado
+        // 1. Manejo de fechas de vencimiento
         const dateIssued = new Date(issueDate);
         const dateDue = new Date(dateIssued);
         dateDue.setDate(dateIssued.getDate() + creditDays);
 
-        // Actualizar deuda del cliente directamente con el valor del DTO
-        await this.clientsService.updateDebt(createInvoiceDto.clientId, pendingAmount);
-
-        // Crear la factura usando desestructuración para que sea más limpio
+        // 2. Crear y guardar la cabecera de la factura
         const invoice = this.invoiceRepository.create({
-            ...createInvoiceDto,
+            ...rest,
+            clientId,
             issueDate: dateIssued,
             dueDate: dateDue,
+            pendingAmount,
+            creditDays,
             status: 'PENDING'
         });
 
-        return await this.invoiceRepository.save(invoice);
+        const savedInvoice = await this.invoiceRepository.save(invoice);
+
+        // 3. Procesar ítems, guardar detalle y DESCONTAR STOCK
+        if (items && items.length > 0) {
+            for (const item of items) {
+                // A. Buscar existencia en inventario
+                const inventory = await this.inventoryRepository.findOneBy({
+                    productId: item.productId
+                });
+
+                // Validar si hay suficiente stock
+                if (!inventory || Number(inventory.quantity) < item.quantity) {
+                    throw new BadRequestException(
+                        `Stock insuficiente para el producto: ${item.productName}. Disponible: ${inventory?.quantity || 0}`
+                    );
+                }
+
+                // B. Restar del inventario
+                inventory.quantity = Number(inventory.quantity) - Number(item.quantity);
+                await this.inventoryRepository.save(inventory);
+
+                // C. Sincronizar columna stock en tabla Product
+                await this.productRepository.update(item.productId, {
+                    stock: inventory.quantity
+                });
+
+                // D. Crear el registro del ítem en la factura
+                const invoiceItem = this.invoiceItemRepository.create({
+                    ...item,
+                    invoiceId: savedInvoice.id,
+                    total: item.quantity * item.unitPrice
+                });
+                await this.invoiceItemRepository.save(invoiceItem);
+            }
+        }
+
+        // 4. Actualizar deuda del cliente (Usando tu lógica de ClientsService)
+        await this.clientsService.updateDebt(clientId, pendingAmount);
+
+        return savedInvoice;
     }
 
     async findAll() {
         return this.invoiceRepository.find({
-            relations: ['client'],
+            relations: ['client', 'items'],
             order: { issueDate: 'DESC' }
         });
     }
@@ -60,25 +107,33 @@ export class InvoicesService {
         });
     }
 
-    async updateInvoice(invoice: Invoice): Promise<Invoice> {
-        return this.invoiceRepository.save(invoice);
-    }
-
     async findOne(id: string): Promise<Invoice> {
         const invoice = await this.invoiceRepository.findOne({
             where: { id },
-            relations: ['client']
+            relations: ['client', 'items']
         });
         if (!invoice) throw new NotFoundException(`Invoice ${id} not found`);
         return invoice;
     }
 
+    // Nota: El método addInvoiceItem individual también debería descontar stock 
+    // si lo usas por separado del create.
     async addInvoiceItem(invoiceId: string, productData: {
         productId: string;
         productName: string;
         quantity: number;
         unitPrice: number;
     }) {
+        const inventory = await this.inventoryRepository.findOneBy({ productId: productData.productId });
+
+        if (!inventory || Number(inventory.quantity) < productData.quantity) {
+            throw new BadRequestException('Stock insuficiente');
+        }
+
+        inventory.quantity -= productData.quantity;
+        await this.inventoryRepository.save(inventory);
+        await this.productRepository.update(productData.productId, { stock: inventory.quantity });
+
         const item = this.invoiceItemRepository.create({
             invoiceId,
             ...productData,
@@ -87,4 +142,7 @@ export class InvoicesService {
         return this.invoiceItemRepository.save(item);
     }
 
+    async updateInvoice(invoice: Invoice): Promise<Invoice> {
+        return this.invoiceRepository.save(invoice);
+    }
 }

@@ -6,28 +6,28 @@ export class Product {
     id: string;
 
     @Column({ unique: true })
-    code: string; // Código (TOR001)
+    code: string;
 
     @Column()
-    name: string; // Nombre completo
+    name: string;
 
     @Column()
-    category: string; // Categoría (Tornillos, Pinturas, etc)
-
-    @Column('int', { default: 0 })
-    stock: number;
+    category: string;
 
     @Column('decimal', { precision: 10, scale: 2, default: 0 })
-    purchasePrice: number; // Precio de compra
+    purchasePrice: number;
 
     @Column('decimal', { precision: 10, scale: 2, default: 0 })
-    salePrice1: number; // Precio Venta 1
+    salePrice1: number;
 
     @Column('decimal', { precision: 10, scale: 2, default: 0 })
-    salePrice2: number; // Precio Venta 2
+    salePrice2: number;
 
     @Column('decimal', { precision: 5, scale: 2, default: 0 })
-    margin: number; // Margen % (calculado: (venta1-compra)/venta1 * 100)
+    margin: number;
+
+    @Column({ type: 'int', default: 0 })
+    stock: number;
 
     @Column({ default: true })
     isActive: boolean;

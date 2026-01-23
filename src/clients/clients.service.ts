@@ -95,16 +95,18 @@ export class ClientsService {
     }
 
     async getClientDetail(clientId: string) {
-        // 1. Obtener datos básicos
-        const clientData = await this.findOne(clientId);
-        const invoices = await this.invoiceRepository.find({
-            where: { clientId },
-            order: { issueDate: 'DESC' }
-        });
-        const payments = await this.paymentsService.getPaymentsByClient(clientId);
+        // 1. Obtener datos básicos + PRODUCTOS COMPRADOS
+        const [clientData, invoices, payments, purchasedProducts] = await Promise.all([
+            this.findOne(clientId),
+            this.invoiceRepository.find({
+                where: { clientId },
+                order: { issueDate: 'DESC' }
+            }),
+            this.paymentsService.getPaymentsByClient(clientId),
+            this.getProductosComprados(clientId)
+        ]);
 
         // 2. Cálculos globales
-        // Sumamos lo que realmente se debe (la suma de los pendingAmount de las facturas)
         const totalPendingInvoices = invoices.reduce((sum, inv) => sum + Number(inv.pendingAmount), 0);
         const totalPaidAmount = payments.reduce((sum, pay) => sum + Number(pay.amount), 0);
 
@@ -123,12 +125,10 @@ export class ClientsService {
                 balance: Number(clientData.pendingDebt).toFixed(2)
             },
             invoices: invoices.map(inv => {
-                // Cálculo de abonos para esta factura específica
                 const abonos = payments
                     .filter(p => p.invoiceId === inv.id)
                     .reduce((sum, p) => sum + Number(p.amount), 0);
 
-                // Determinar estado visual (si hay abonos pero no está PAID, es PARTIAL para el cliente)
                 let displayStatus = inv.status;
                 if (inv.status === 'PENDING' && abonos > 0) {
                     displayStatus = 'PARTIAL';
@@ -141,7 +141,7 @@ export class ClientsService {
                     totalAmount: (Number(inv.pendingAmount) + abonos).toFixed(2),
                     paidAmount: abonos.toFixed(2),
                     pendingAmount: Number(inv.pendingAmount).toFixed(2),
-                    status: displayStatus, // Estado "inteligente" para el frontend
+                    status: displayStatus,
                     overdue: new Date(inv.dueDate) < new Date() && inv.status !== 'PAID'
                 };
             }),
@@ -150,7 +150,35 @@ export class ClientsService {
                 date: new Date(p.paymentDate).toLocaleDateString('es-VE'),
                 amount: Number(p.amount).toFixed(2),
                 invoiceNumber: p.invoice?.invoiceNumber || 'N/A'
-            }))
+            })),
+            purchasedProducts
         };
     }
+
+    private async getProductosComprados(clientId: string) {
+        return this.invoiceRepository
+            .createQueryBuilder('i')
+            // Unimos con la tabla física de items
+            .leftJoin('invoice_items', 'ii', 'ii."invoiceId" = i.id')
+            .select([
+                "to_char(i.issueDate, 'DD-MM-YYYY') as fecha",
+                "ii.productName as producto", // Usamos el nombre que ya está en la tabla de items
+                "ii.quantity as cantidad",
+                "ii.unitPrice as precio",
+                "(ii.quantity * ii.unitPrice) as total"
+            ])
+            .where('i.clientId = :clientId::uuid', { clientId })
+            .andWhere('ii.quantity > 0')
+            .orderBy('i.issueDate', 'DESC')
+            .limit(20)
+            .getRawMany()
+            .then(items => items.map(item => ({
+                fecha: item.fecha || 'N/A',
+                producto: item.producto || 'N/A',
+                cantidad: Number(item.cantidad || 0).toFixed(2),
+                precio: Number(item.precio || 0).toFixed(2),
+                total: Number(item.total || 0).toFixed(2)
+            })));
+    }
+
 }

@@ -14,24 +14,29 @@ export class InventoryService {
         private productRepository: Repository<Product>,
     ) { }
 
+    // inventory.service.ts
     async create(createInventoryDto: CreateInventoryDto): Promise<Inventory> {
-        // 1. Buscamos el producto para obtener sus precios actuales
-        const product = await this.productRepository.findOneBy({ id: createInventoryDto.productId });
-
+        const { productId, quantity } = createInventoryDto;
+        const product = await this.productRepository.findOneBy({ id: productId });
         if (!product) throw new NotFoundException('Producto no encontrado');
 
-        const inventory = new Inventory();
-        inventory.quantity = createInventoryDto.quantity;
-        inventory.productId = createInventoryDto.productId;
-        inventory.isActive = true;
+        let inventory = await this.inventoryRepository.findOneBy({ productId });
 
+        if (inventory) {
+            inventory.quantity = Number(inventory.quantity) + Number(quantity);
+        } else {
+            inventory = this.inventoryRepository.create({
+                ...createInventoryDto,
+                costPrice: product.purchasePrice,
+                sellPrice: product.salePrice1,
+                isActive: true
+            });
+        }
 
-        inventory.costPrice = product.purchasePrice;
-        inventory.sellPrice = product.salePrice1;
-
+        product.stock = Number(inventory.quantity);
+        await this.productRepository.save(product);
         return this.inventoryRepository.save(inventory);
     }
-
 
     async findAll(): Promise<Inventory[]> {
         return this.inventoryRepository

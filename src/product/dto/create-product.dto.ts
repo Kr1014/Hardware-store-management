@@ -14,10 +14,6 @@ export class CreateProductDto {
     category: string;
 
     @IsNumber()
-    @Min(0)
-    stock: number;
-
-    @IsNumber()
     @IsPositive()
     purchasePrice: number;
 

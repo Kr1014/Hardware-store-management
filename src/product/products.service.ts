@@ -17,7 +17,7 @@ export class ProductsService {
             margin: this.calculateMargin(
                 createProductDto.purchasePrice,
                 createProductDto.salePrice1,
-                createProductDto.salePrice2  // ← AGREGAR este parámetro
+                createProductDto.salePrice2
             ),
         };
 
@@ -34,7 +34,7 @@ export class ProductsService {
     async getDashboardStats() {
         const [total, lowStock] = await Promise.all([
             this.productRepository.count({ where: { isActive: true } }),
-            this.productRepository.count({ where: { stock: LessThan(10), isActive: true } }),
+            this.productRepository.count({ where: { isActive: true } }),
 
         ]);
 
@@ -53,7 +53,7 @@ export class ProductsService {
             throw new NotFoundException(`Product with ID ${id} not found`);
         }
 
-        // Actualizar campos
+
         Object.assign(product, updateProductDto);
 
         // Recalcular margen SIEMPRE con precio más barato
@@ -64,7 +64,6 @@ export class ProductsService {
                 product.salePrice2
             );
         }
-
         return this.productRepository.save(product);
     }
 
