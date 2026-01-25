@@ -12,6 +12,9 @@ import { PaymentsModule } from './payments/payments.module';
 import { DashboardService } from './dashboard/dashboard.service';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { PurchasesModule } from './purchases/purchases.module';
+import { SupplierPaymentsModule } from './supplier-payments/supplier-payments.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -30,7 +33,6 @@ import { InventoryModule } from './inventory/inventory.module';
         host: configService.get<string>('DB_HOST'),
         port: configService.get<number>('DB_PORT'),
         autoLoadEntities: true,
-        // Eliminamos migrationsRun de aquí para que solo se corran por comando
         migrationsRun: false,
       }),
     }),
@@ -42,6 +44,9 @@ import { InventoryModule } from './inventory/inventory.module';
     PaymentsModule,
     DashboardModule,
     InventoryModule,
+    SuppliersModule,
+    PurchasesModule,
+    SupplierPaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

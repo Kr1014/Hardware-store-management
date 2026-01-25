@@ -14,7 +14,7 @@ export class InventoryService {
         private productRepository: Repository<Product>,
     ) { }
 
-    // inventory.service.ts
+
     async create(createInventoryDto: CreateInventoryDto): Promise<Inventory> {
         const { productId, quantity } = createInventoryDto;
         const product = await this.productRepository.findOneBy({ id: productId });
