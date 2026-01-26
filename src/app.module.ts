@@ -13,6 +13,7 @@ import { DashboardService } from './dashboard/dashboard.service';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { QuotationsModule } from './quotations/quotations.module';
 import { SupplierPaymentsModule } from './supplier-payments/supplier-payments.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 
@@ -47,6 +48,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
     SuppliersModule,
     PurchasesModule,
     SupplierPaymentsModule,
+    QuotationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
