@@ -38,10 +38,19 @@ export class PurchasesService {
 
             const totalAmount = purchaseItems.reduce((acc, item) => acc + item.total, 0);
 
-            // 2. Create Purchase Record
+            // 2. Manejo de fechas de vencimiento
+            const dateIssued = new Date(purchaseData.purchaseDate);
+            const creditDays = purchaseData.creditDays || 0;
+            const dueDate = new Date(dateIssued);
+            dueDate.setDate(dateIssued.getDate() + creditDays);
+
+            // 3. Create Purchase Record
             const purchase = this.purchaseRepository.create({
                 ...purchaseData,
+                creditDays,
+                dueDate,
                 totalAmount,
+                pendingAmount: totalAmount,
                 items: purchaseItems,
             });
 
@@ -83,5 +92,9 @@ export class PurchasesService {
         });
         if (!purchase) throw new NotFoundException(`Purchase with ID ${id} not found`);
         return purchase;
+    }
+
+    async updatePurchase(purchase: Purchase) {
+        return this.purchaseRepository.save(purchase);
     }
 }

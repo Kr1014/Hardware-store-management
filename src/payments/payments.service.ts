@@ -1,14 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException, forwardRef, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Payment } from '../payments/entities/payment.entity';
+import { Payment, PaymentType } from '../payments/entities/payment.entity';
 import { InvoicesService } from '../invoices/invoices.service';
 import { ClientsService } from '../clients/clients.service';
-
-export interface CreatePaymentDto {
-    invoiceId: string;
-    amount: number;
-}
+import { PurchasesService } from '../purchases/purchases.service';
+import { SuppliersService } from '../suppliers/suppliers.service';
+import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -21,61 +19,86 @@ export class PaymentsService {
 
         @Inject(forwardRef(() => ClientsService))
         private readonly clientsService: ClientsService,
+
+        @Inject(forwardRef(() => PurchasesService))
+        private readonly purchasesService: PurchasesService,
+
+        @Inject(forwardRef(() => SuppliersService))
+        private readonly suppliersService: SuppliersService,
     ) { }
 
-    async createPayment(createPaymentDto: CreatePaymentDto): Promise<Payment> {
-        const { invoiceId, amount } = createPaymentDto;
+    async createPayment(dto: CreatePaymentDto): Promise<Payment> {
+        const { targetId, amount, paymentDate, type } = dto;
 
-        // 1. Verificar factura existe y permitir pagos si está PENDING
-        const invoice = await this.invoicesService.findOne(invoiceId);
+        if (type === PaymentType.INCOME) {
+            // --- Lógica para Ventas (CXC) ---
+            const invoice = await this.invoicesService.findOne(targetId);
 
-        // Mantenemos PENDING porque ya no usaremos PARTIAL en la DB
-        if (invoice.status !== 'PENDING') {
-            throw new BadRequestException('Only PENDING invoices can be paid');
+            if (invoice.status === 'PAID') {
+                throw new BadRequestException('Invoice is already paid');
+            }
+
+            if (amount > invoice.pendingAmount) {
+                throw new BadRequestException('Payment exceeds invoice balance');
+            }
+
+            const payment = this.paymentRepository.create({
+                invoiceId: targetId,
+                amount: Number(amount),
+                paymentDate: new Date(paymentDate),
+                type: PaymentType.INCOME
+            });
+            const savedPayment = await this.paymentRepository.save(payment);
+
+            const remaining = Number(invoice.pendingAmount) - Number(amount);
+            invoice.pendingAmount = remaining > 0 ? remaining : 0;
+            invoice.status = remaining > 0 ? 'PENDING' : 'PAID';
+
+            await this.invoicesService.updateInvoice(invoice);
+            await this.clientsService.updateDebt(invoice.clientId, -amount);
+
+            return savedPayment;
+
+        } else {
+            // --- Lógica para Compras (CXP) ---
+            const purchase = await this.purchasesService.findOne(targetId);
+
+            if (purchase.status === 'PAID') {
+                throw new BadRequestException('Purchase is already paid');
+            }
+
+            if (amount > purchase.pendingAmount) {
+                throw new BadRequestException('Payment exceeds purchase balance');
+            }
+
+            const payment = this.paymentRepository.create({
+                purchaseId: targetId,
+                amount: Number(amount),
+                paymentDate: new Date(paymentDate),
+                type: PaymentType.OUTCOME
+            });
+            const savedPayment = await this.paymentRepository.save(payment);
+
+            const remaining = Number(purchase.pendingAmount) - Number(amount);
+            purchase.pendingAmount = remaining > 0 ? remaining : 0;
+            purchase.status = remaining > 0 ? 'PENDING' : 'PAID' as any; // Cast as any if enum mismatch
+
+            await this.purchasesService.updatePurchase(purchase);
+            await this.suppliersService.updateDebt(purchase.supplierId, -amount);
+
+            return savedPayment;
         }
-
-        if (amount > invoice.pendingAmount) {
-            throw new BadRequestException('Payment amount exceeds invoice balance');
-        }
-
-        // 2. Crear registro del pago
-        const payment = this.paymentRepository.create({
-            invoiceId,
-            amount: Number(amount),
-            paymentDate: new Date()
-        });
-        const savedPayment = await this.paymentRepository.save(payment);
-
-        // 3. Actualizar estado de la factura
-        const remaining = Number(invoice.pendingAmount) - Number(amount);
-
-        invoice.pendingAmount = remaining > 0 ? remaining : 0;
-
-        /**
-         * LÓGICA ACTUALIZADA:
-         * Si el remanente es mayor a 0, se queda en 'PENDING' para evitar 
-         * errores con el ENUM de la base de datos que no tiene 'PARTIAL'.
-         */
-        invoice.status = remaining > 0 ? 'PENDING' : 'PAID';
-
-        await this.invoicesService.updateInvoice(invoice);
-
-        // 4. Reducir deuda global del cliente
-        await this.clientsService.updateDebt(invoice.clientId, -amount);
-
-        return savedPayment;
     }
 
     async findAll() {
         return this.paymentRepository.find({
-            relations: ['invoice', 'invoice.client'],
+            relations: ['invoice', 'invoice.client', 'purchase', 'purchase.supplier'],
             order: { paymentDate: 'DESC' }
         });
     }
 
     async getPaymentsByClient(clientId: string) {
         return this.paymentRepository.find({
-            // Buscamos pagos donde la factura pertenezca al cliente
             where: { invoice: { clientId } },
             relations: ['invoice', 'invoice.client'],
             order: { paymentDate: 'DESC' }

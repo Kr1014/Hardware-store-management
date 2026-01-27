@@ -29,8 +29,24 @@ export class Invoice {
     @Column('int')
     creditDays: number; // Plazo: 15, 30, 45 días
 
-    @Column('decimal', { precision: 12, scale: 2 })
-    pendingAmount: number; // Monto pendiente
+    @Column('decimal', {
+        precision: 12,
+        scale: 2,
+        transformer: {
+            to: (value: number) => value,
+            from: (value: string) => parseFloat(value)
+        }
+    })
+    totalAmount: number; // Monto total de la factura
+
+    @Column('decimal', {
+        precision: 12, scale: 2,
+        transformer: {
+            to: (value: number) => value,
+            from: (value: string) => parseFloat(value)
+        }
+    })
+    pendingAmount: number;
 
     @Column({
         type: 'enum',

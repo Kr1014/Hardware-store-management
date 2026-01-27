@@ -1,6 +1,6 @@
 import {
     IsString, IsUUID, IsDateString, IsInt, IsNumber,
-    Min, IsNotEmpty, IsArray, ValidateNested
+    Min, IsNotEmpty, IsArray, ValidateNested, IsOptional
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -38,7 +38,8 @@ export class CreateInvoiceDto {
 
     @IsNumber()
     @Min(0)
-    pendingAmount: number;
+    @IsOptional()
+    pendingAmount?: number;
 
     // ✅ NUEVO: Lista de productos
     @IsArray()

@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsNotEmpty, IsNumber, IsDateString, IsArray, ValidateNested, IsEnum, Min } from 'class-validator';
+import { IsUUID, IsString, IsNotEmpty, IsNumber, IsDateString, IsArray, ValidateNested, IsEnum, Min, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PurchaseStatus } from '../entities/purchase.entity';
 
@@ -25,6 +25,11 @@ export class CreatePurchaseDto {
 
     @IsDateString()
     purchaseDate: string;
+
+    @IsNumber()
+    @Min(0)
+    @IsOptional()
+    creditDays?: number;
 
     @IsEnum(PurchaseStatus)
     status: PurchaseStatus;

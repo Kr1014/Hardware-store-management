@@ -28,21 +28,28 @@ export class InvoicesService {
     ) { }
 
     async create(createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
-        const { pendingAmount, creditDays, issueDate, items, clientId, ...rest } = createInvoiceDto;
+        const { creditDays, issueDate, items, clientId, ...rest } = createInvoiceDto;
 
-        // 1. Manejo de fechas de vencimiento
+        // 1. Calcular Totales automáticamente de los items
+        let calculatedTotal = 0;
+        if (items && items.length > 0) {
+            calculatedTotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+        }
+
+        // 2. Manejo de fechas de vencimiento automático
         const dateIssued = new Date(issueDate);
         const dateDue = new Date(dateIssued);
-        dateDue.setDate(dateIssued.getDate() + creditDays);
+        dateDue.setDate(dateIssued.getDate() + (creditDays || 0));
 
-        // 2. Crear y guardar la cabecera de la factura
+        // 3. Crear y guardar la cabecera de la factura
         const invoice = this.invoiceRepository.create({
             ...rest,
             clientId,
             issueDate: dateIssued,
             dueDate: dateDue,
-            pendingAmount,
-            creditDays,
+            totalAmount: calculatedTotal,
+            pendingAmount: calculatedTotal,
+            creditDays: creditDays || 0,
             status: 'PENDING'
         });
 
@@ -83,7 +90,7 @@ export class InvoicesService {
         }
 
         // 4. Actualizar deuda del cliente (Usando tu lógica de ClientsService)
-        await this.clientsService.updateDebt(clientId, pendingAmount);
+        await this.clientsService.updateDebt(clientId, savedInvoice.pendingAmount);
 
         return savedInvoice;
     }

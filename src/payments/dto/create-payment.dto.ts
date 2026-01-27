@@ -1,12 +1,25 @@
-import { IsUUID, IsNumber, Min, IsNotEmpty } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, IsDateString, Min } from 'class-validator';
+
+export enum PaymentType {
+    INCOME = 'INCOME',   // Para Facturas de Venta (Invoices)
+    OUTCOME = 'OUTCOME', // Para Facturas de Compra (Purchases)
+}
 
 export class CreatePaymentDto {
+    @IsEnum(PaymentType)
+    type: PaymentType;
+
     @IsUUID()
-    @IsNotEmpty()
-    invoiceId: string;
+    targetId: string; // Puede ser invoiceId o purchaseId
 
     @IsNumber()
     @Min(0.01)
-    @IsNotEmpty()
     amount: number;
+
+    @IsDateString()
+    paymentDate: string; // La fecha que solicitaste agregar
+
+    @IsString()
+    @IsOptional()
+    notes?: string;
 }

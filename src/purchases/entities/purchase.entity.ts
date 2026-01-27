@@ -42,6 +42,17 @@ export class Purchase {
     })
     totalAmount: number;
 
+    @Column('decimal', {
+        precision: 12,
+        scale: 2,
+        default: 0,
+        transformer: {
+            to: (value: number) => value,
+            from: (value: string) => parseFloat(value),
+        },
+    })
+    pendingAmount: number;
+
     @Column({
         type: 'enum',
         enum: PurchaseStatus,
@@ -49,8 +60,14 @@ export class Purchase {
     })
     status: PurchaseStatus;
 
-    @Column()
+    @Column({ type: 'date' })
     purchaseDate: Date;
+
+    @Column({ type: 'int', default: 0 })
+    creditDays: number;
+
+    @Column({ type: 'date', nullable: true })
+    dueDate: Date;
 
     @OneToMany(() => PurchaseItem, (item) => item.purchase, { cascade: true })
     items: PurchaseItem[];
