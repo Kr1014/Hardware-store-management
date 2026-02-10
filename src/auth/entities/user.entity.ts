@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { UserRole } from '../enums/user-role.enum';
 
 @Entity('users')
 export class User {
@@ -11,6 +12,13 @@ export class User {
 
     @Column()
     password: string;
+
+    @Column({
+        type: 'enum',
+        enum: UserRole,
+        default: UserRole.CUSTOMER
+    })
+    role: UserRole;
 
     @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
     createdAt: Date;

@@ -3,9 +3,12 @@ import { QuotationsService } from './quotations.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { QuotationStatus } from './entities/quotation.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/enums/user-role.enum';
 
 @UseGuards(JwtAuthGuard)
 @Controller('quotations')
+@Roles(UserRole.ADMIN)
 export class QuotationsController {
     constructor(private readonly quotationsService: QuotationsService) { }
 

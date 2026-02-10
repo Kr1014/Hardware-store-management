@@ -30,10 +30,10 @@ export class AuthService {
     }
 
     async login(user: any) {
-        const payload = { email: user.email, sub: user.id };  // ← SIN role
+        const payload = { email: user.email, sub: user.id, role: user.role };  // ← SIN role
         return {
             access_token: this.jwtService.sign(payload),
-            user: { id: user.id || user.userId, email: user.email }  // ← SIN role
+            user: { id: user.id || user.userId, email: user.email, role: user.role }  // ← SIN role
         };
     }
 

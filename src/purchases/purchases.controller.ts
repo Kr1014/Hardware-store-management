@@ -1,9 +1,13 @@
-import { Controller, Get, Post, Body, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseUUIDPipe, UseGuards, Query } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/enums/user-role.enum';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 @Controller('purchases')
 export class PurchasesController {
     constructor(private readonly purchasesService: PurchasesService) { }
@@ -14,8 +18,8 @@ export class PurchasesController {
     }
 
     @Get()
-    findAll() {
-        return this.purchasesService.findAll();
+    findAll(@Query('status') status?: string) {
+        return this.purchasesService.findAll(status);
     }
 
     @Get(':id')

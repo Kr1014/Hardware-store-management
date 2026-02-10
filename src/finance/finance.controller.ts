@@ -2,8 +2,12 @@ import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { FinanceService } from './finance.service';
 import { RegisterPaymentDto } from './dto/register-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/enums/user-role.enum';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 @Controller('finance')
 export class FinanceController {
     constructor(private readonly financeService: FinanceService) { }

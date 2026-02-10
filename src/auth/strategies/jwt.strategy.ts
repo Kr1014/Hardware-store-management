@@ -14,6 +14,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     async validate(payload: any) {
-        return { userId: payload.sub, email: payload.email };
+        // Es vital que el payload del token contenga el role. 
+        // Si al hacer login no lo metiste en el payload, aquí llegará undefined.
+        return {
+            userId: payload.sub,
+            email: payload.email,
+            role: payload.role // <--- ESTO ES LO QUE TE FALTA
+        };
     }
 }

@@ -24,4 +24,10 @@ export class CreateProductDto {
     @IsNumber()
     @IsPositive()
     salePrice2: number;
+
+    @IsString()
+    imageUrl?: string;
+
+    @IsString()
+    brand?: string;
 }

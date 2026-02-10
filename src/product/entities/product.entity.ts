@@ -29,6 +29,12 @@ export class Product {
     @Column({ type: 'int', default: 0 })
     stock: number;
 
+    @Column({ type: 'text', nullable: true })
+    imageUrl: string;
+
+    @Column({ nullable: true })
+    brand: string;
+
     @Column({ default: true })
     isActive: boolean;
 

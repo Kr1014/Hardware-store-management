@@ -78,11 +78,26 @@ export class PurchasesService {
         }
     }
 
-    async findAll() {
-        return this.purchaseRepository.find({
-            relations: ['supplier', 'items', 'items.product'],
-            order: { purchaseDate: 'DESC' },
-        });
+    async findAll(status?: string) {
+        const query = this.purchaseRepository.createQueryBuilder('purchase')
+            .leftJoin('purchase.supplier', 'supplier')
+            .addSelect(['supplier.id', 'supplier.name'])
+            .leftJoinAndSelect('purchase.items', 'items')
+            .leftJoinAndSelect('items.product', 'product')
+            .orderBy('purchase.purchaseDate', 'DESC');
+
+        if (status) {
+            // Normalize to uppercase and validate
+            const statusEnum = status.toUpperCase();
+            const validStatuses = ['PENDING', 'PAID'];
+
+            if (validStatuses.includes(statusEnum)) {
+                query.andWhere('purchase.status = :status', { status: statusEnum });
+            }
+            // If invalid status, ignore the filter to prevent database errors
+        }
+
+        return query.getMany();
     }
 
     async findOne(id: string) {

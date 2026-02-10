@@ -95,11 +95,25 @@ export class InvoicesService {
         return savedInvoice;
     }
 
-    async findAll() {
-        return this.invoiceRepository.find({
-            relations: ['client', 'items'],
-            order: { issueDate: 'DESC' }
-        });
+    async findAll(status?: string) {
+        const query = this.invoiceRepository.createQueryBuilder('invoice')
+            .leftJoin('invoice.client', 'client')
+            .addSelect(['client.id', 'client.name'])
+            .leftJoinAndSelect('invoice.items', 'items')
+            .orderBy('invoice.issueDate', 'DESC');
+
+        if (status) {
+            // Normalize to uppercase and validate
+            const statusEnum = status.toUpperCase();
+            const validStatuses = ['PENDING', 'PAID', 'OVERDUE'];
+
+            if (validStatuses.includes(statusEnum)) {
+                query.andWhere('invoice.status = :status', { status: statusEnum });
+            }
+            // If invalid status, ignore the filter to prevent database errors
+        }
+
+        return query.getMany();
     }
 
     async getOverdueInvoices() {

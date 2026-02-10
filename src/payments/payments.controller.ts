@@ -2,8 +2,11 @@ import { Controller, Post, Body, Get, Param, UseGuards, UsePipes, ValidationPipe
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { JwtAuthGuard } from '../auth/guards';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/enums/user-role.enum';
 
 @Controller('payments')
+@Roles(UserRole.ADMIN)
 @UseGuards(JwtAuthGuard)
 export class PaymentsController {
     constructor(private readonly paymentsService: PaymentsService) { }

@@ -1,15 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { Supplier } from './entities/supplier.entity';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { SupplierPayment } from '../supplier-payments/entities/supplier-payment.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { PurchaseItem } from '../purchases/entities/purchase-item.entity';
 
 @Injectable()
 export class SuppliersService {
     constructor(
         @InjectRepository(Supplier)
         private readonly supplierRepo: Repository<Supplier>,
+        private readonly dataSource: DataSource,
     ) { }
 
     async create(dto: CreateSupplierDto): Promise<Supplier> {
@@ -25,22 +29,67 @@ export class SuppliersService {
     async findOne(id: string) {
         const supplier = await this.supplierRepo.findOne({
             where: { id },
-            relations: ['purchases', 'payments', 'purchases.items', 'purchases.items.product']
+            relations: ['purchases']
         });
 
         if (!supplier) throw new NotFoundException(`Supplier ${id} not found`);
 
-        const totalPurchases = supplier.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0);
-        const totalPaid = supplier.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+        const purchaseIds = supplier.purchases.map(p => p.id);
 
-        // Calculate unique products with their last cost
-        const productsMap = new Map();
-        const sortedPurchases = [...supplier.purchases].sort((a, b) =>
-            new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
-        );
+        // 1. Accurate Payment History (Unified + Legacy)
+        const oldPayments = await this.dataSource.getRepository(SupplierPayment).find({
+            where: { supplierId: id },
+            order: { paymentDate: 'DESC' }
+        });
 
-        for (const purchase of sortedPurchases) {
-            for (const item of purchase.items) {
+        let unifiedPayments: Payment[] = [];
+        if (purchaseIds.length > 0) {
+            unifiedPayments = await this.dataSource.getRepository(Payment).find({
+                where: { purchaseId: In(purchaseIds) },
+                relations: ['purchase'],
+                order: { paymentDate: 'DESC' }
+            });
+        }
+
+        const historyPayments = [
+            ...oldPayments.map(p => ({
+                id: p.id,
+                date: p.paymentDate,
+                amount: p.amount,
+                method: p.paymentMethod,
+                reference: p.reference,
+                type: 'LEGACY'
+            })),
+            ...unifiedPayments.map(p => ({
+                id: p.id,
+                date: p.paymentDate,
+                amount: p.amount,
+                method: 'UNIFIED', // Could add more details if needed
+                reference: p.purchase?.purchaseNumber,
+                type: 'UNIFIED'
+            }))
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        // 2. Calculate paid amount per purchase for the summary view
+        const paidPerPurchase = new Map<string, number>();
+        unifiedPayments.forEach(p => {
+            if (p.purchaseId) {
+                const current = paidPerPurchase.get(p.purchaseId) || 0;
+                paidPerPurchase.set(p.purchaseId, current + Number(p.amount));
+            }
+        });
+
+        // 3. Efficient Unique Products History
+        let suppliedProducts: any[] = [];
+        if (purchaseIds.length > 0) {
+            const rawItems = await this.dataSource.getRepository(PurchaseItem).find({
+                where: { purchaseId: In(purchaseIds) },
+                relations: ['product', 'purchase'],
+                order: { purchase: { purchaseDate: 'DESC' } }
+            });
+
+            const productsMap = new Map();
+            for (const item of rawItems) {
                 if (item.product && !productsMap.has(item.productId)) {
                     productsMap.set(item.productId, {
                         id: item.product.id,
@@ -50,16 +99,25 @@ export class SuppliersService {
                     });
                 }
             }
+            suppliedProducts = Array.from(productsMap.values());
         }
 
+        // 3. Totals Calculation
+        const totalPurchases = supplier.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0);
+        const totalPaid = historyPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+        // 4. Simplify Response (Extracting only what's needed)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { purchases, payments, ...cleanSupplier } = supplier as any;
+
         return {
-            ...supplier,
+            ...cleanSupplier,
             summary: {
                 totalPurchases: totalPurchases.toFixed(2),
                 ordersCount: supplier.purchases.length,
                 totalPaid: totalPaid.toFixed(2),
-                paymentsCount: supplier.payments.length,
-                balance: (totalPurchases - totalPaid).toFixed(2),
+                paymentsCount: historyPayments.length,
+                balance: Number(supplier.pendingDebt).toFixed(2),
             },
             history: {
                 purchases: supplier.purchases.map(p => ({
@@ -67,17 +125,11 @@ export class SuppliersService {
                     number: p.purchaseNumber,
                     date: p.purchaseDate,
                     amount: p.totalAmount,
+                    paidAmount: Number(paidPerPurchase.get(p.id) || 0).toFixed(2),
                     status: p.status,
-                    itemsCount: p.items.length
                 })),
-                payments: supplier.payments.map(p => ({
-                    id: p.id,
-                    date: p.paymentDate,
-                    amount: p.amount,
-                    method: p.paymentMethod,
-                    reference: p.reference
-                })),
-                products: Array.from(productsMap.values())
+                payments: historyPayments,
+                products: suppliedProducts
             }
         };
     }

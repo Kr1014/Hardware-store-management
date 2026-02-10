@@ -11,9 +11,18 @@ export class ProductsService {
         private productRepository: Repository<Product>,
     ) { }
 
-    async create(createProductDto: CreateProductDto): Promise<Product> {
+    async create(createProductDto: CreateProductDto, file?: Express.Multer.File, req?: any): Promise<Product> {
+        let imageUrl = createProductDto.imageUrl;
+
+        if (file) {
+            const protocol = req.protocol;
+            const host = req.get('host');
+            imageUrl = `${protocol}://${host}/public/products/${file.filename}`;
+        }
+
         const productData = {
             ...createProductDto,
+            imageUrl,
             margin: this.calculateMargin(
                 createProductDto.purchasePrice,
                 createProductDto.salePrice1,

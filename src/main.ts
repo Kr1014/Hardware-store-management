@@ -3,21 +3,36 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // Creamos la instancia de la aplicación
   const app = await NestFactory.create(AppModule);
 
-  // ✅ Configuración Global de Validación y Transformación
+  // 1. Configuración de Validaciones Globales
+  // Esto asegura que los datos que llegan al Backend coincidan con tus DTOs
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,            // Remueve campos que no estén en el DTO
-      forbidNonWhitelisted: true, // Lanza error si envían campos extraños
-      transform: true,            // 👈 ESTO convierte automáticamente strings a numbers/booleans según el DTO
+      whitelist: true,            // Elimina campos que no estén en el DTO
+      forbidNonWhitelisted: true, // Lanza error si hay campos extra
+      transform: true,            // Convierte tipos (ej: string a number) automáticamente
     }),
   );
 
-  // Habilitar CORS para que el Frontend pueda conectarse después
-  app.enableCors();
+  // 2. Configuración de CORS
+  // Crucial para que tu Frontend en el puerto 3001 pueda comunicarse
+  app.enableCors({
+    origin: 'http://localhost:3001', // El origen permitido (tu Frontend)
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,               // Permite el envío de cookies/headers de auth
+  });
 
-  await app.listen(process.env.PORT ?? 3000);
-  console.log(`Application is running on: ${await app.getUrl()}`);
+  // 3. Definición del Puerto
+  // Lo mantenemos en el 3000 como querías
+  const port = process.env.PORT ?? 3000;
+
+  await app.listen(port);
+
+  console.log(`\n🚀 Backend de Ferretería listo!`);
+  console.log(`📡 URL: http://localhost:${port}`);
+  console.log(`✨ CORS habilitado para: http://localhost:3001\n`);
 }
+
 bootstrap();
