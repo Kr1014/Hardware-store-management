@@ -14,6 +14,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - ferreteria-network
 
   # Servicio de la Aplicación NestJS
   api:
@@ -25,10 +27,35 @@ services:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     env_file:
-      # <--- Añade esto
-      - .env # <--- Docker leerá el archivo .env
+      - .env
     depends_on:
       - postgres_db
+    networks:
+      - ferreteria-network
+
+  # NUEVO: Servicio n8n
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: sales_n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      # HEMOS QUITADO LAS LÍNEAS QUE APUNTABAN A POSTGRES_DB
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - ferreteria-network
+
+networks:
+  ferreteria-network:
+    driver: bridge
 
 volumes:
   pgdata:
+  n8n_data:

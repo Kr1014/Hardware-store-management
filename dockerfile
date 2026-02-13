@@ -1,22 +1,24 @@
 FROM node:20-alpine
 
-# 1. Instalar pnpm
+# 1️⃣ Instalar dependencias del sistema (ANTES de npm/pnpm)
+RUN apk add --no-cache poppler-utils
+
+# 2️⃣ Instalar pnpm
 RUN npm install -g pnpm
 
-# 2. Definir directorio de trabajo
+# 3️⃣ Directorio de trabajo
 WORKDIR /usr/src/app
 
-# 3. Copiar los archivos que definen las librerías
-# AHORA Docker sí podrá ver el pnpm-lock.yaml
+# 4️⃣ Copiar archivos de dependencias
 COPY package.json pnpm-lock.yaml ./
 
-# 4. Instalar dependencias
+# 5️⃣ Instalar dependencias Node
 RUN pnpm install
 
-# 5. Copiar el resto del código
+# 6️⃣ Copiar código
 COPY . .
 
-# 6. Construir
+# 7️⃣ Construir
 RUN pnpm run build
 
 EXPOSE 3000

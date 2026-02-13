@@ -1,7 +1,7 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';  // ← IMPORTA Request
+import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, CreateUserDto } from './dto';
-import { LocalAuthGuard } from './guards';  // ← SOLO LocalAuthGuard para login
+import { CreateUserDto } from './dto';
+import { LocalAuthGuard } from './guards';
 import { Public } from './decorators/public.decorator';
 
 @Controller('auth')
@@ -16,7 +16,7 @@ export class AuthController {
     @Public()
     @UseGuards(LocalAuthGuard)
     @Post('login')
-    async login(@Request() req) {  // ← CAMBIA A @Request() req
-        return this.authService.login(req.user);  // ← req.user viene de LocalStrategy
+    async login(@Request() req) {
+        return this.authService.login(req.user);
     }
 }
