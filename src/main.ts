@@ -1,38 +1,42 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+// 1. Nuevas importaciones necesarias para archivos estáticos
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
-  // Creamos la instancia de la aplicación
-  const app = await NestFactory.create(AppModule);
+  // 2. Le decimos a Nest que use Express explícitamente
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // 1. Configuración de Validaciones Globales
-  // Esto asegura que los datos que llegan al Backend coincidan con tus DTOs
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,            // Elimina campos que no estén en el DTO
-      forbidNonWhitelisted: true, // Lanza error si hay campos extra
-      transform: true,            // Convierte tipos (ej: string a number) automáticamente
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
-  // 2. Configuración de CORS
-  // Crucial para que tu Frontend en el puerto 3001 pueda comunicarse
   app.enableCors({
-    origin: 'http://localhost:3001', // El origen permitido (tu Frontend)
+    origin: 'http://localhost:3001',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,               // Permite el envío de cookies/headers de auth
+    credentials: true,
   });
 
-  // 3. Definición del Puerto
-  // Lo mantenemos en el 3000 como querías
+  // 3. CONFIGURACIÓN DE ARCHIVOS ESTÁTICOS
+  // Esto expone físicamente la carpeta 'uploads/products' en la URL '/public/products'
+  app.useStaticAssets(join(process.cwd(), 'uploads', 'products'), {
+    prefix: '/public/products/',
+  });
+
   const port = process.env.PORT ?? 3000;
 
   await app.listen(port);
 
-  console.log(`\n🚀 Backend de Ferretería listo!`);
+  console.log(`\n🚀 Backend listo!`);
   console.log(`📡 URL: http://localhost:${port}`);
-  console.log(`✨ CORS habilitado para: http://localhost:3001\n`);
+  console.log(`✨ CORS habilitado para: http://localhost:3001`);
+  console.log(`🖼️ Imágenes expuestas en: http://localhost:${port}/public/products/\n`);
 }
 
 bootstrap();

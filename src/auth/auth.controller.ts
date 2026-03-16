@@ -8,6 +8,7 @@ import { Public } from './decorators/public.decorator';
 export class AuthController {
     constructor(private authService: AuthService) { }
 
+    @Public()
     @Post('register')
     async register(@Body() createUserDto: CreateUserDto) {
         return this.authService.register(createUserDto);
