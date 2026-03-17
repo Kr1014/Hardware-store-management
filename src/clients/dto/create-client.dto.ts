@@ -21,4 +21,8 @@ export class CreateClientDto {
     @Min(0)
     @IsOptional()
     pendingDebt?: number;
+
+    @IsString()
+    @IsOptional()
+    email?: string;
 }
