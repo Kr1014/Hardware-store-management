@@ -44,11 +44,17 @@ import { StorageModule } from './common/storage/storage.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        ...dataSourceOptions,
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
+        type: 'postgres',
+        // Esto obliga a Nest a usar la URL de Railway
+        url: configService.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        migrationsRun: false,
+        synchronize: true, // Úsalo solo en desarrollo/pruebas
+        ssl: true, // Railway requiere SSL para conexiones externas
+        extra: {
+          ssl: {
+            rejectUnauthorized: false,
+          },
+        },
       }),
     }),
 
