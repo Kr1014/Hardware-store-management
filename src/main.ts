@@ -18,6 +18,7 @@ async function bootstrap() {
     }),
   );
 
+
   app.useGlobalFilters(new AllExceptionsFilter());
 
   app.enableCors({
