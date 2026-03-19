@@ -1,25 +1,26 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 
 @Injectable()
 export class MailService {
   private resend: Resend;
-  private adminEmail!: string;
+  private adminEmail: string;
 
-  constructor() {
-    if (!process.env.ADMIN_EMAIL) {
-      throw new Error('ADMIN_EMAIL no está definido en el .env');
+  constructor(private configService: ConfigService) { // Inyecta el servicio
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    const email = this.configService.get<string>('ADMIN_EMAIL');
+
+    if (!apiKey || !email) {
+      // En lugar de lanzar Error aquí, puedes poner un log y manejarlo
+      // para que el servidor no se caiga (Crash)
+      console.error('❌ Error: Configuración de correo incompleta en el entorno');
+      throw new Error('Configuración de correo faltante');
     }
 
-    if (!process.env.RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY no está definido en el .env');
-    }
-
-    this.adminEmail = process.env.ADMIN_EMAIL;
-    this.resend = new Resend(process.env.RESEND_API_KEY);
-
+    this.adminEmail = email;
+    this.resend = new Resend(apiKey);
   }
-
   /* =======================
      EMAIL AL CLIENTE
   ======================= */
