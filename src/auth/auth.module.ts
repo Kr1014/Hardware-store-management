@@ -18,11 +18,11 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
         PassportModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],
-            useFactory: async (configService: ConfigService) => ({  // ← ConfigService NO CONFIG_OPTIONS
-                secret: configService.get('JWT_SECRET') || 'fallback-secret-ferreteria',
+            useFactory: async (configService: ConfigService) => ({
+                secret: configService.getOrThrow<string>('JWT_SECRET'),
                 signOptions: { expiresIn: '24h' },
             }),
-            inject: [ConfigService],  // ← ConfigService aquí
+            inject: [ConfigService],
         }),
     ],
     providers: [

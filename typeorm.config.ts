@@ -18,6 +18,7 @@ export const dataSourceOptions: DataSourceOptions = {
     entities: [__dirname + '/**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/src/migrations/*{.ts,.js}'],
 
+    // PRODUCTION HARDENING: Synchronize is OFF by default.
     synchronize: configService.get('TYPEORM_SYNCHRONIZE') === 'true',
     logging: configService.get('TYPEORM_LOGGING') === 'true',
     migrationsRun: configService.get('TYPEORM_MIGRATIONS_RUN') === 'true',

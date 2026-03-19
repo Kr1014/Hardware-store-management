@@ -9,10 +9,6 @@ export class CreateProductDto {
     @IsNotEmpty()
     name: string;
 
-    @IsString()
-    @IsNotEmpty()
-    category: string;
-
     @IsNumber()
     @IsPositive()
     purchasePrice: number;

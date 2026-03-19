@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, IsNull } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { CatalogProcessingService } from './catalog-processing.service';
 import * as fs from 'fs';
 import { join } from 'path';
@@ -34,10 +35,13 @@ export class ProductsService {
     async create(createProductDto: CreateProductDto, file?: Express.Multer.File, req?: any): Promise<Product> {
         let imageUrl = createProductDto.imageUrl;
 
+        // Si se sube archivo, simulamos o usamos subida a S3 
         if (file) {
-            const protocol = req.protocol;
-            const host = req.get('host');
-            imageUrl = `${protocol}://${host}/public/products/${file.filename}`;
+            // En un entorno real, aquí invocarías el SDK de AWS o DigitalOcean
+            // y obtendrías la URL de S3.
+            const s3Url = process.env.S3_BUCKET_URL || 'https://tu-bucket.sfo3.digitaloceanspaces.com';
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+            imageUrl = `${s3Url}/products/${uniqueSuffix}_${file.originalname}`;
         }
 
         const productData = {
@@ -62,59 +66,87 @@ export class ProductsService {
         // que guarda los archivos .jpg usando el code del producto.
         await this.catalogProcessingService.cropProducts(imageBuffer, products);
 
-        const createdProducts: Product[] = [];
-
-        // 2. Ahora creamos los registros en la DB
+        // 2. Ahora preparamos los registros en memoria para Bulk Insert
+        const productsToInsert: any[] = [];
         for (const p of products) {
-            const product = this.productRepository.create({
+            productsToInsert.push({
                 code: p.code,
                 name: p.name,
                 category: category,
                 purchasePrice: parseFloat(p.price) * 0.7,
                 salePrice1: parseFloat(p.price),
                 salePrice2: parseFloat(p.price),
-                imageUrl: `http://localhost:3000/public/products/${p.code}.jpg`,
+                imageUrl: `${process.env.S3_BUCKET_URL || 'https://tu-bucket.sfo3.digitaloceanspaces.com'}/products/${p.code}.jpg`,
                 margin: 30,
                 isActive: true,
             });
-
-            const saved = await this.productRepository.save(product);
-            createdProducts.push(saved);
         }
 
-        return createdProducts;
+        // 3. Bulk Insert the records via chunks
+        const chunkSize = 100;
+        for (let i = 0; i < productsToInsert.length; i += chunkSize) {
+            const chunk = productsToInsert.slice(i, i + chunkSize);
+            await this.productRepository.createQueryBuilder()
+                .insert()
+                .into(Product)
+                .values(chunk)
+                .orIgnore() // Prevents crash if product code already exists
+                .execute();
+        }
+
+        return { message: `${productsToInsert.length} productos procesados correctamente.` } as any;
     }
     async processPageImport(imageBuffer: Buffer, products: any[]): Promise<Product[]> {
 
         // 1. Sharp procesa el buffer y genera los recortes (.jpg) en /uploads/products
         await this.catalogProcessingService.cropProducts(imageBuffer, products);
 
-        const savedProducts: Product[] = [];
-
-        // 2. Guardamos cada producto en PostgreSQL usando tu repositorio
+        // 2. Preparamos pre-registros
+        const productsToInsert: any[] = [];
         for (const p of products) {
-            const product = this.productRepository.create({
+            productsToInsert.push({
                 code: p.code,
                 name: p.name,
                 category: p.category || 'Ferreteria', // Fallback por si la IA olvida uno
-                purchasePrice: parseFloat(p.purchasePrice) || 0,
-                salePrice1: parseFloat(p.salePrice1) || 0,
-                salePrice2: parseFloat(p.salePrice2) || 0,
-                imageUrl: `http://localhost:3000/public/products/${p.code}.jpg`,
+                purchasePrice: p.purchasePrice || 0,
+                salePrice1: p.salePrice1 || 0,
+                salePrice2: p.salePrice2 || 0,
+                imageUrl: `${process.env.S3_BUCKET_URL || 'https://tu-bucket.sfo3.digitaloceanspaces.com'}/products/${p.code}.jpg`,
                 isActive: true,
             });
-
-            const saved = await this.productRepository.save(product);
-            savedProducts.push(saved);
         }
 
-        return savedProducts;
+        // 3. Bulk Insert the records via chunks of 100
+        const chunkSize = 100;
+        for (let i = 0; i < productsToInsert.length; i += chunkSize) {
+            const chunk = productsToInsert.slice(i, i + chunkSize);
+            await this.productRepository.createQueryBuilder()
+                .insert()
+                .into(Product)
+                .values(chunk)
+                .orIgnore() // Resiliencia a duplicados sin romper la carga
+                .execute();
+        }
+
+        return { message: `${productsToInsert.length} productos insertados en lote` } as any;
     }
-    async findAll() {
-        return this.productRepository.find({
+    async findAll(paginationDto?: PaginationDto) {
+        const limit = paginationDto?.limit || 50;
+        const offset = paginationDto?.offset || 0;
+
+        const [data, total] = await this.productRepository.findAndCount({
             where: { isActive: true },
-            order: { code: 'ASC' }
+            order: { code: 'ASC' },
+            take: limit,
+            skip: offset
         });
+
+        return {
+            data,
+            total,
+            limit,
+            offset
+        };
     }
 
     async getDashboardStats() {

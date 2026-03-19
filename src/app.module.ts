@@ -26,6 +26,7 @@ import { SupplierPaymentsModule } from './supplier-payments/supplier-payments.mo
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { CartModule } from './cart/cart.module';
 import { MailModule } from './mail/mail.module';
+import { StorageModule } from './common/storage/storage.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { MailModule } from './mail/mail.module';
     QuotationsModule,
     CartModule,
     MailModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [

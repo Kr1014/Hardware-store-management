@@ -5,6 +5,7 @@ import * as path from 'path';
 import axios from 'axios';
 import FormData from 'form-data';
 import sharp from 'sharp';
+import { S3Service } from '../common/storage/s3.service'; // Ajusta la ruta según tu estructura
 
 interface VisualBlock {
   top: number;
@@ -27,225 +28,100 @@ export interface CropProductData {
   };
 }
 
+interface N8nResponse {
+  products: CropProductData[];
+}
+
 @Injectable()
 export class CatalogProcessingService {
-
   private readonly logger = new Logger(CatalogProcessingService.name);
 
   private readonly TEMP_IMG_DIR = './uploads/catalog/temp_pages';
-  private readonly CROPPED_DIR = './uploads/products';
+  private readonly N8N_API_KEY = process.env.N8N_API_KEY!;
+  private readonly N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL!;
 
-  private readonly N8N_WEBHOOK_URL =
-    'http://sales_n8n:5678/webhook-test/de0958fc-e5a0-412b-a706-7b9d3c474fdd';
-
+  constructor(private readonly s3Service: S3Service) { }
 
   async processPdf(pdfPath: string): Promise<void> {
-
-    this.logger.log(`🚀 Iniciando conversión con pdftoppm: ${pdfPath}`);
-
     await fs.ensureDir(this.TEMP_IMG_DIR);
-
     const baseFileName = path.parse(pdfPath).name;
 
     try {
-
-      this.logger.log('📸 Renderizando páginas...');
-      execSync(
-        `pdftoppm -jpeg -r 150 -f 2 -l 3 "${pdfPath}" "${this.TEMP_IMG_DIR}/${baseFileName}"`,
-        { stdio: 'inherit' }
+      const totalPages = parseInt(
+        execSync(`pdfinfo "${pdfPath}" | grep Pages: | awk '{print $2}'`).toString().trim()
       );
 
-      const files = await fs.readdir(this.TEMP_IMG_DIR);
+      this.logger.log(`🚀 Iniciando proceso: ${totalPages} páginas detectadas.`);
 
-      const pageImages = files
-        .filter(f => f.startsWith(baseFileName) && f.endsWith('.jpg'))
-        .sort();
+      for (let i = 1; i <= totalPages; i++) {
+        this.logger.log(`📸 Renderizando página ${i} de ${totalPages}...`);
 
-      this.logger.log(`✅ ${pageImages.length} páginas listas para enviar.`);
+        const currentImgName = `${baseFileName}-page-${i}.jpg`;
+        const imgPath = path.join(this.TEMP_IMG_DIR, currentImgName);
+        const outputBase = path.join(this.TEMP_IMG_DIR, `${baseFileName}-page-${i}`);
 
-      for (const [index, imgName] of pageImages.entries()) {
+        execSync(
+          `pdftoppm -jpeg -r 150 -f ${i} -l ${i} -singlefile "${pdfPath}" "${outputBase}"`,
+          { stdio: 'inherit' }
+        );
 
-        const imgPath = path.join(this.TEMP_IMG_DIR, imgName);
+        if (fs.existsSync(imgPath)) {
+          const n8nResponse = await this.sendToN8n(imgPath, currentImgName);
 
-        await this.sendToN8n(imgPath, imgName);
+          if (n8nResponse?.products) {
+            this.logger.log(`✂️ Recortando ${n8nResponse.products.length} productos...`);
+            const imageBuffer = await fs.readFile(imgPath);
+            await this.cropProducts(imageBuffer, n8nResponse.products);
+          }
 
-        this.logger.log(`📊 Progreso: Enviando página ${index + 1} de ${pageImages.length} totales...`);
+          await fs.remove(imgPath);
+        }
 
-        await fs.remove(imgPath);
-
-        if (index < pageImages.length - 1) {
+        if (i < totalPages) {
           await new Promise(resolve => setTimeout(resolve, 15000));
         }
       }
 
-
-
+      this.logger.log('🏁 ¡Carga masiva completada!');
     } catch (error: any) {
-
-      this.logger.error(
-        `Fallo envío a n8n: ${error.response?.data?.message || error.message}`
-      );
-
-      if (error.response) {
-        this.logger.error(`Status: ${error.response.status}`);
-      }
-
+      this.logger.error(`❌ Error crítico: ${error.message}`);
     } finally {
-
       await fs.remove(pdfPath);
     }
-
-
   }
 
-
-  private async sendToN8n(imgPath: string, fileName: string) {
-
+  private async sendToN8n(imgPath: string, fileName: string): Promise<N8nResponse | null> {
     this.logger.log(`📤 Enviando ${fileName} a n8n...`);
-
-    const form = new (FormData as any)();
+    const form = new FormData();
     form.append('file', fs.createReadStream(imgPath));
     form.append('fileName', fileName);
 
     try {
-
-      await axios.post(this.N8N_WEBHOOK_URL, form, {
-        headers: { ...form.getHeaders() },
-        timeout: 120000,
+      const response = await axios.post<N8nResponse>(this.N8N_WEBHOOK_URL, form, {
+        headers: {
+          ...form.getHeaders(),
+          'x-api-key': this.N8N_API_KEY
+        },
+        timeout: 180000,
       });
 
-      this.logger.log(`📥 Respuesta n8n (${fileName}): OK`);
-
+      if (response.data && response.data.products) {
+        this.logger.log(`📥 Respuesta n8n: ${response.data.products.length} productos.`);
+        return response.data;
+      }
+      return null;
     } catch (error: any) {
-
-      const errorMsg = error.response
-        ? `Status ${error.response.status}: ${JSON.stringify(error.response.data)}`
-        : error.message;
-
-      this.logger.error(`Fallo envío a n8n: ${errorMsg}`);
+      this.logger.error(`❌ Fallo envío a n8n [${fileName}]: ${error.message}`);
+      return null;
     }
   }
 
-  // async cropProducts(imageBuffer: Buffer, products: CropProductData[]): Promise<boolean> {
-  //   if (!fs.existsSync(this.CROPPED_DIR)) {
-  //     fs.mkdirSync(this.CROPPED_DIR, { recursive: true });
-  //   }
-
-  //   const metadata = await sharp(imageBuffer).metadata();
-  //   const realWidth = metadata.width || 0;
-  //   const realHeight = metadata.height || 0;
-
-  //   // Límite superior para ignorar el encabezado de la página (12%)
-  //   const headerLimitY = Math.round(realHeight * 0.12);
-
-  //   // Áreas de escaneo y recorte
-  //   const scanLeft = Math.round(realWidth * 0.02);
-  //   const scanWidth = Math.round(realWidth * 0.15);
-  //   const cropLeft = Math.round(realWidth * 0.01);
-  //   const cropWidth = Math.round(realWidth * 0.19);
-
-  //   // Extraemos la franja lateral para analizar densidad de píxeles
-  //   const { data, info } = await sharp(imageBuffer)
-  //     .extract({ left: scanLeft, top: headerLimitY, width: scanWidth, height: realHeight - headerLimitY })
-  //     .greyscale()
-  //     .raw()
-  //     .toBuffer({ resolveWithObject: true });
-
-  //   const rowsWithContent = new Array(info.height).fill(false);
-  //   const threshold = 240; // Sensibilidad al blanco (240-255 es considerado fondo)
-
-  //   for (let y = 0; y < info.height; y++) {
-  //     let darkPixelsInRow = 0;
-  //     for (let x = 0; x < info.width; x++) {
-  //       if (data[y * info.width + x] < threshold) {
-  //         darkPixelsInRow++;
-  //       }
-  //     }
-
-  //     // 🔥 MEJORA 1: Filtro de densidad aumentado (0.12)
-  //     // Esto ignora líneas de texto finas como "IMAGEN" o "PI-..." 
-  //     // porque no tienen suficiente "masa" oscura en la fila.
-  //     if (darkPixelsInRow > (info.width * 0.12)) {
-  //       rowsWithContent[y] = true;
-  //     }
-  //   }
-
-  //   let allBlocks: Array<{ top: number; bottom: number; height: number }> = [];
-  //   let startY = -1;
-
-  //   // 🔥 MEJORA 2: Gap reducido a 10px
-  //   // Al ser más pequeño, detectará espacios mínimos entre productos y 
-  //   // evitará que salgan duplicados en una misma tira.
-  //   const minGap = 10;
-  //   let whiteSpaceCounter = 0;
-
-  //   for (let y = 0; y < rowsWithContent.length; y++) {
-  //     if (rowsWithContent[y]) {
-  //       if (startY === -1) startY = y;
-  //       whiteSpaceCounter = 0;
-  //     } else if (startY !== -1) {
-  //       whiteSpaceCounter++;
-  //       if (whiteSpaceCounter >= minGap) {
-  //         const endY = y - whiteSpaceCounter;
-  //         const blockHeight = endY - startY;
-
-  //         // Solo guardamos bloques que tengan una altura mínima razonable de producto
-  //         if (blockHeight > 60) {
-  //           allBlocks.push({
-  //             top: startY + headerLimitY,
-  //             bottom: endY + headerLimitY,
-  //             height: blockHeight
-  //           });
-  //         }
-  //         startY = -1;
-  //         whiteSpaceCounter = 0;
-  //       }
-  //     }
-  //   }
-
-  //   // Ordenamos por tamaño para quedarnos con los bloques más grandes (productos reales)
-  //   const finalBlocks = allBlocks
-  //     .sort((a, b) => b.height - a.height)
-  //     .slice(0, products.length)
-  //     .sort((a, b) => a.top - b.top);
-
-  //   this.logger.log(`🎯 Recorte final: Procesando ${finalBlocks.length} productos detectados.`);
-
-  //   for (let i = 0; i < finalBlocks.length; i++) {
-  //     const product = products[i];
-  //     const block = finalBlocks[i];
-
-  //     await sharp(imageBuffer)
-  //       .extract({
-  //         left: cropLeft,
-  //         // 🔥 MEJORA 3: Eliminamos el margen negativo (-15)
-  //         // Usar block.top exacto garantiza que no "atrapes" el texto que está justo arriba.
-  //         top: block.top,
-  //         width: cropWidth,
-  //         // 🔥 MEJORA 4: Margen extra de altura mínimo (+5)
-  //         // Evita que el final del recorte toque el inicio del siguiente producto.
-  //         height: block.height + 5
-  //       })
-  //       .jpeg({ quality: 100 })
-  //       .toFile(path.join(this.CROPPED_DIR, `${product.code}.jpg`));
-
-  //     this.logger.log(`✅ Producto guardado: ${product.code} (${block.height}px)`);
-  //   }
-
-  //   return true;
-  // }
   async cropProducts(imageBuffer: Buffer, products: CropProductData[]): Promise<boolean> {
-    if (!fs.existsSync(this.CROPPED_DIR)) {
-      fs.mkdirSync(this.CROPPED_DIR, { recursive: true });
-    }
-
     const metadata = await sharp(imageBuffer).metadata();
     const realWidth = metadata.width || 0;
     const realHeight = metadata.height || 0;
 
-    // Umbral del 12% para detectar la zona de la cabecera
     const headerAreaLimit = Math.round(realHeight * 0.12);
-
     const scanLeft = Math.round(realWidth * 0.02);
     const scanWidth = Math.round(realWidth * 0.15);
     const cropLeft = Math.round(realWidth * 0.01);
@@ -281,25 +157,17 @@ export class CatalogProcessingService {
       }
     }
 
-    // ORDENAR POR POSICIÓN
     allBlocks.sort((a, b) => a.top - b.top);
 
-    // LÓGICA DE FILTRADO INTELIGENTE:
-    // Solo descartamos el primer bloque si está MUY arriba (zona cabecera) 
-    // Y si al quitarlo todavía nos quedan suficientes bloques para los productos.
     let productBlocks = allBlocks.filter(block => {
       const isHeaderZone = block.top < headerAreaLimit;
-      const isVeryLarge = block.height > (realHeight * 0.15); // La cabecera negra suele ser alta
-
-      // Si es un bloque en la zona superior y parece cabecera, lo ignoramos
+      const isVeryLarge = block.height > (realHeight * 0.15);
       if (isHeaderZone && isVeryLarge && allBlocks.length > products.length) {
         return false;
       }
       return true;
     });
 
-    // Si después del filtro aún sobran (o faltan), ajustamos al número exacto de productos
-    // priorizando los que están más abajo (los productos nunca están arriba del todo)
     if (productBlocks.length > products.length) {
       productBlocks = productBlocks.slice(productBlocks.length - products.length);
     }
@@ -310,8 +178,6 @@ export class CatalogProcessingService {
       const product = products[i];
       const block = productBlocks[i];
 
-      // Validación extra: si el bloque es demasiado alto, lo ajustamos desde abajo
-      // Esto resuelve el caso de image_e855f0.png donde la cabecera se pega al producto
       let finalTop = block.top;
       let finalHeight = block.height;
       const expectedMaxHeight = Math.round(realHeight * 0.10);
@@ -321,20 +187,28 @@ export class CatalogProcessingService {
         finalHeight = expectedMaxHeight;
       }
 
-      await sharp(imageBuffer)
-        .extract({
-          left: cropLeft,
-          top: Math.max(0, Math.floor(finalTop)),
-          width: cropWidth,
-          height: Math.min(realHeight - finalTop, Math.ceil(finalHeight))
-        })
-        .jpeg({ quality: 100 })
-        .toFile(path.join(this.CROPPED_DIR, `${product.code}.jpg`));
+      try {
+        // 🚀 Recorte en memoria y subida directa a AWS S3
+        const croppedBuffer = await sharp(imageBuffer)
+          .extract({
+            left: cropLeft,
+            top: Math.max(0, Math.floor(finalTop)),
+            width: cropWidth,
+            height: Math.min(realHeight - finalTop, Math.ceil(finalHeight))
+          })
+          .jpeg({ quality: 100 })
+          .toBuffer();
+
+        const s3Key = `products/${product.code}.jpg`;
+        const s3Url = await this.s3Service.uploadFile(croppedBuffer, s3Key, 'image/jpeg');
+
+        this.logger.log(`✅ Producto ${product.code} subido a S3: ${s3Url}`);
+        product.imageUrl = s3Url; // Actualizamos la URL para que el sistema sepa dónde está
+      } catch (err) {
+        this.logger.error(`❌ Error procesando/subiendo producto ${product.code}: ${err.message}`);
+      }
     }
 
     return true;
   }
 }
-
-
-

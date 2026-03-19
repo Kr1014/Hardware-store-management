@@ -1,18 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 @Entity('products')
+@Index(['category', 'isActive'])
+@Index(['name'])
 export class Product {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column({ unique: true })
+    @Index()
     code: string;
 
     @Column()
     name: string;
-
-    @Column()
-    category: string;
 
     @Column('decimal', { precision: 10, scale: 2, default: 0 })
     purchasePrice: number;
