@@ -32,7 +32,6 @@ import { StorageModule } from './common/storage/storage.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
     }),
 
     ServeStaticModule.forRoot({
