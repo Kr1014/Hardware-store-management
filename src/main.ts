@@ -22,7 +22,7 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
