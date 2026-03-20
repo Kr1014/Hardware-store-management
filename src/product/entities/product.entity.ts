@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 @Entity('products')
-@Index(['category', 'isActive'])
+@Index(['isActive'])
 @Index(['name'])
 export class Product {
     @PrimaryGeneratedColumn('uuid')
