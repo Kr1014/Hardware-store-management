@@ -102,8 +102,8 @@ export class ProductsController {
     // ====================================================
     // IMPORTAR CATÁLOGO PDF (Inicia el flujo)
     // ====================================================
-    @Public()
-    @UseGuards(ApiKeyGuard) // 🛡️ Protegido por API Key para n8n
+    @UseGuards(JwtAuthGuard, RolesGuard) // 🛡️ Protegido por API Key para n8n
+    @Roles(UserRole.ADMIN)
     @Post('upload-catalog')
     @UseInterceptors(
         FileInterceptor('file', {
@@ -137,7 +137,6 @@ export class ProductsController {
     // ====================================================
     // IMPORT-PROCESS (Recibe datos de n8n)
     // ====================================================
-    @Public()
     @UseGuards(ApiKeyGuard) // 🛡️ Protegido por API Key para n8n
     @Post('import-process')
     @UseInterceptors(FileInterceptor('file'))
