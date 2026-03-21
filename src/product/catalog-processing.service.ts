@@ -47,6 +47,8 @@ export class CatalogProcessingService {
     const tempPdfPath = path.join('/tmp', `catalog-${Date.now()}.pdf`);
     const currentTempImgDir = path.join('/tmp', `images-${Date.now()}`);
 
+    await fs.writeFile(tempPdfPath, file.buffer);
+
     try {
       // 2. Crear el archivo físico desde el buffer de memoria
       await fs.ensureDir(currentTempImgDir);
