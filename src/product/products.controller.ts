@@ -107,12 +107,7 @@ export class ProductsController {
     @Post('upload-catalog')
     @UseInterceptors(
         FileInterceptor('file', {
-            storage: diskStorage({
-                destination: './uploads/catalog/temp',
-                filename: (req, file, cb) => {
-                    cb(null, `catalog-${Date.now()}.pdf`);
-                },
-            }),
+            storage: memoryStorage(),
             limits: { fileSize: 50 * 1024 * 1024 },
             fileFilter: (req, file, cb) => {
                 if (file.mimetype !== 'application/pdf') {
@@ -125,12 +120,14 @@ export class ProductsController {
     async uploadCatalog(@UploadedFile() file: Express.Multer.File) {
         if (!file) throw new BadRequestException('File is required');
 
-        this.catalogProcessingService.processPdf(file.path)
+        // Ahora pasamos el buffer o el objeto file completo, 
+        // ya no existe file.path porque no se guard     
+        this.catalogProcessingService.processPdf(file)
             .catch(err => console.error('❌ Error en procesamiento:', err));
 
         return {
             message: 'Catálogo recibido. Procesando en segundo plano...',
-            pdfRecibido: file.filename,
+            pdfRecibido: file.originalname,
         };
     }
 

@@ -107,13 +107,13 @@ export class ProductsService {
             productsToInsert.push({
                 code: p.code,
                 name: p.name,
-                category: p.category || 'Ferreteria', // Fallback por si la IA olvida uno
                 purchasePrice: p.purchasePrice || 0,
                 salePrice1: p.salePrice1 || 0,
                 salePrice2: p.salePrice2 || 0,
-                imageUrl: `${process.env.S3_BUCKET_URL || 'https://tu-bucket.sfo3.digitaloceanspaces.com'}/products/${p.code}.jpg`,
+                imageUrl: `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/products/${p.code}.jpg`,
                 isActive: true,
             });
+            console.log(`[DB-DEBUG] Guardando producto ${p.code} con URL: products/${p.code}.jpg`);
         }
 
         // 3. Bulk Insert the records via chunks of 100

@@ -8,7 +8,7 @@ export class S3Service {
 
     constructor() {
         this.s3Client = new S3Client({
-            region: process.env.AWS_REGION || 'us-east-1',
+            region: process.env.AWS_REGION || 'us-east-2',
             credentials: {
                 accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
                 secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
@@ -27,6 +27,7 @@ export class S3Service {
                     ContentType: contentType,
                 }),
             );
+            console.log(`[S3-DEBUG] Archivo subido a: products/${key}`);
             return `https://${bucketName}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
         } catch (error) {
             this.logger.error(`❌ Error subiendo a S3: ${error.message}`);

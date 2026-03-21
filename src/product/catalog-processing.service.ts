@@ -42,51 +42,72 @@ export class CatalogProcessingService {
 
   constructor(private readonly s3Service: S3Service) { }
 
-  async processPdf(pdfPath: string): Promise<void> {
-    await fs.ensureDir(this.TEMP_IMG_DIR);
-    const baseFileName = path.parse(pdfPath).name;
+  async processPdf(file: Express.Multer.File): Promise<void> {
+    // 1. Definir rutas en /tmp (único lugar con permisos de escritura en Railway)
+    const tempPdfPath = path.join('/tmp', `catalog-${Date.now()}.pdf`);
+    const currentTempImgDir = path.join('/tmp', `images-${Date.now()}`);
 
     try {
+      // 2. Crear el archivo físico desde el buffer de memoria
+      await fs.ensureDir(currentTempImgDir);
+      await fs.writeFile(tempPdfPath, file.buffer);
+
+      const baseFileName = path.parse(tempPdfPath).name;
+
+      // 3. Obtener el número de páginas
       const totalPages = parseInt(
-        execSync(`pdfinfo "${pdfPath}" | grep Pages: | awk '{print $2}'`).toString().trim()
+        execSync(`pdfinfo "${tempPdfPath}" | grep Pages: | awk '{print $2}'`)
+          .toString()
+          .trim()
       );
 
-      this.logger.log(`🚀 Iniciando proceso: ${totalPages} páginas detectadas.`);
+      this.logger.log(`🚀 Catálogo detectado: ${totalPages} páginas.`);
 
       for (let i = 1; i <= totalPages; i++) {
-        this.logger.log(`📸 Renderizando página ${i} de ${totalPages}...`);
+        this.logger.log(`📸 Procesando página ${i}/${totalPages}...`);
 
         const currentImgName = `${baseFileName}-page-${i}.jpg`;
-        const imgPath = path.join(this.TEMP_IMG_DIR, currentImgName);
-        const outputBase = path.join(this.TEMP_IMG_DIR, `${baseFileName}-page-${i}`);
+        const imgPath = path.join(currentTempImgDir, currentImgName);
+        const outputBase = path.join(currentTempImgDir, `${baseFileName}-page-${i}`);
 
+        // 4. Convertir PDF a JPG (Requiere poppler-utils instalado en el server)
         execSync(
-          `pdftoppm -jpeg -r 150 -f ${i} -l ${i} -singlefile "${pdfPath}" "${outputBase}"`,
+          `pdftoppm -jpeg -r 150 -f ${i} -l ${i} -singlefile "${tempPdfPath}" "${outputBase}"`,
           { stdio: 'inherit' }
         );
 
         if (fs.existsSync(imgPath)) {
+          // 5. Enviar a n8n
           const n8nResponse = await this.sendToN8n(imgPath, currentImgName);
 
-          if (n8nResponse?.products) {
-            this.logger.log(`✂️ Recortando ${n8nResponse.products.length} productos...`);
+          // 6. Si n8n detectó productos, recortarlos
+          if (n8nResponse?.products && n8nResponse.products.length > 0) {
+            this.logger.log(`✂️ Recortando ${n8nResponse.products.length} productos de la página ${i}`);
             const imageBuffer = await fs.readFile(imgPath);
             await this.cropProducts(imageBuffer, n8nResponse.products);
           }
 
+          // Limpiar la imagen de la página actual para ahorrar espacio en /tmp
           await fs.remove(imgPath);
         }
 
+        // Delay de cortesía para no saturar n8n ni la CPU de Railway
         if (i < totalPages) {
-          await new Promise(resolve => setTimeout(resolve, 15000));
+          await new Promise(resolve => setTimeout(resolve, 10000));
         }
       }
 
-      this.logger.log('🏁 ¡Carga masiva completada!');
+      this.logger.log('🏁 Procesamiento de catálogo finalizado.');
+
     } catch (error: any) {
-      this.logger.error(`❌ Error crítico: ${error.message}`);
+      this.logger.error(`❌ Error en processPdf: ${error.message}`);
+      throw error;
     } finally {
-      await fs.remove(pdfPath);
+      // 7. LIMPIEZA CRÍTICA: Borrar el PDF y la carpeta temporal de imágenes
+      await Promise.all([
+        fs.remove(tempPdfPath).catch(() => { }),
+        fs.remove(currentTempImgDir).catch(() => { })
+      ]);
     }
   }
 
